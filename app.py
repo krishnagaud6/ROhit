@@ -38,7 +38,21 @@ st.markdown(
     .metric { background: white; border: 1px solid #e3eaf1; border-radius: 17px; padding: 20px; min-height: 105px; }
     .metric-label { color: #708096; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
     .metric-value { font-family: 'Manrope', sans-serif; font-size: 23px; font-weight: 800; color: #172d50; margin-top: 8px; }
-    .mascot { text-align: center; font-size: 76px; padding: 14px; background: #f3f6ff; border-radius: 20px; margin-bottom: 12px; }
+    .brain-mascot { text-align: center; font-size: 78px; line-height: 1.2; padding: 22px 16px 18px; border-radius: 22px; margin: 12px 0 14px; border: 1px solid transparent; }
+    .brain-pink { background: linear-gradient(135deg, #fff0f6, #ffd7e7); border-color: #f5b8d0; }
+    .brain-brown { background: linear-gradient(135deg, #f5eee9, #d8bda9); border-color: #c9a58d; }
+    .result-card { background: #ffffff; border: 1px solid #dce8ef; border-radius: 22px; padding: 24px; margin: 12px 0 18px 0; box-shadow: 0 8px 28px rgba(24,48,78,0.05); }
+    .result-card-pink { background: linear-gradient(145deg, #fff8fb, #fff0f6); border-color: #f1b9d0; }
+    .result-card-brown { background: linear-gradient(145deg, #fffaf6, #f3e8df); border-color: #c9a58d; }
+    .result-kicker { color: #188c83; font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+    .result-heading { color: #172d50; font-family: 'Manrope', sans-serif; font-size: 30px; line-height: 1.2; font-weight: 800; margin: 8px 0; }
+    .result-description { color: #62758b; font-size: 14px; line-height: 1.7; }
+    .score-label { color: #172d50; font-weight: 700; margin-bottom: 5px; }
+    .score-track { height: 12px; overflow: hidden; border-radius: 999px; background: #edf0f4; margin: 7px 0 5px; }
+    .score-fill { height: 100%; border-radius: 999px; }
+    .score-fill-pink { background: linear-gradient(90deg, #e879ad, #f3a7ca); }
+    .score-fill-brown { background: linear-gradient(90deg, #9a6848, #c69a7b); }
+    .small-note { color: #77869a; font-size: 12px; line-height: 1.6; }
     div[data-testid="stFileUploader"] { background: #f6fafc; border: 2px dashed #a9c9d5; border-radius: 16px; padding: 16px; }
     .stButton > button { border-radius: 12px; min-height: 48px; font-weight: 700; }
     .footer { color: #77869a; text-align: center; font-size: 12px; padding: 25px 0; }
@@ -48,43 +62,30 @@ st.markdown(
 )
 
 # ============================================================
-# 2. MODEL SETTINGS — confirm these with your friend.
-# A .pt/.pth filename does NOT tell us how it was saved.
+# 2. MODEL SETTINGS — best-effort configuration from checkpoint
+# The uploaded checkpoint contains weights only. We can infer two
+# output units and reconstruct a matching parameter layout, but the
+# true training labels and image preprocessing are not embedded.
+# The pink/happy and brown/concerned names are visual themes, not verified tumor labels.
 # ============================================================
 
 MODEL_PATH = Path("tumor_cnn.pth")
-
-# Choose one after asking your friend:
-#   "torchscript"  -> a TorchScript-exported model file
-#   "state_dict"   -> saved weights; needs model_definition.py
 MODEL_FORMAT = "state_dict"
 
-# Choose one after checking the model's forward() output:
-#   "binary_logit"              -> one raw logit; positive means CLASS_NAMES[1]
-#   "binary_probability"        -> one probability; positive means CLASS_NAMES[1]
-#   "two_class_logits"          -> two raw scores, one per class
-#   "two_class_probabilities"   -> two probabilities, in class order
-#   "multiclass_logits"         -> raw score per class
-#   "multiclass_probabilities"  -> probability per class
-OUTPUT_MODE = None
+# Best-effort assumption: a two-unit final Linear layer returns logits.
+# The checkpoint does NOT record which output means tumor/no tumor.
+# These names describe UI colour themes only, not medical meanings.
+OUTPUT_MODE = "two_class_logits"
+CLASS_NAMES = ["Happy-looking brain", "Concerned-looking brain"]
 
-# Class names MUST be in exactly the same order as the training labels.
-# Change these if the model was trained with a different class order/types.
-CLASS_NAMES = ["No Tumor", "Tumor"]
+# Best-effort assumption: two 2x2 pooling operations reduce 32x32 -> 8x8,
+# matching the classifier's 32*8*8 = 2048 input features. The inferred
+# model also includes adaptive pooling to 8x8, which is a no-op at this size.
+# Training may have used different preprocessing; verify before relying on outputs.
+IMAGE_SIZE = (224, 224)  # (width, height); demo default, not confirmed from training
+IMAGE_MODE = "RGB"
 
-# Used only for the friendly mascot. Add the exact label(s) meaning no tumor.
-# Names are normalized to ignore spaces, hyphens and underscores.
-NO_TUMOR_LABELS = {"no tumor", "normal", "healthy", "no_tumour"}
-
-# These settings MUST match the preprocessing used during model training.
-# IMAGE_SIZE is (width, height) for PIL.
-IMAGE_SIZE = (224, 224)
-IMAGE_MODE = "RGB"  # use "L" for grayscale only if the model expects 1 channel
-
-# Default: convert pixels to [0, 1] only. Set mean/std if training used them.
-# Example for an ImageNet-pretrained RGB model:
-# NORMALIZE_MEAN = (0.485, 0.456, 0.406)
-# NORMALIZE_STD  = (0.229, 0.224, 0.225)
+# Best-effort assumption: scale pixel values to [0, 1]; no mean/std normalization.
 NORMALIZE_MEAN = None
 NORMALIZE_STD = None
 
@@ -333,8 +334,7 @@ with st.sidebar:
     st.caption(f"Device: {DEVICE}")
     if MODEL_FORMAT not in ("torchscript", "state_dict"):
         st.warning("Set MODEL_FORMAT near the top of app.py.")
-    if OUTPUT_MODE is None:
-        st.warning("Set OUTPUT_MODE after confirming the model's output format.")
+    st.info("Pink/happy and brown/concerned are visual themes only. The model class meanings are not verified; this is not a medical diagnosis.")
 
 # ============================================================
 # 5. Quick information cards
@@ -394,10 +394,7 @@ with right_col:
     )
 
     if not config_ready:
-        st.info(
-            "Before prediction, configure MODEL_FORMAT and OUTPUT_MODE at the top of app.py "
-            "using the details from your friend. This prevents the app from guessing."
-        )
+        st.info("Model configuration is incomplete. Check MODEL_FORMAT and OUTPUT_MODE near the top of app.py.")
 
     if analyze_button and image is not None:
         try:
@@ -409,30 +406,67 @@ with right_col:
             with torch.inference_mode():
                 raw_output = model(model_input)
 
-            label, confidence, class_probabilities = interpret_prediction(raw_output)
+            # Convert the model output to two comparable category scores.
+            # The category names below are placeholders because the checkpoint
+            # does not record which one means tumor or no tumor.
+            label, _top_score, class_scores = interpret_prediction(raw_output)
+            predicted_index = int(np.argmax(class_scores))
+            predicted_label = CLASS_NAMES[predicted_index]
 
-            # Mascot is a UI decoration. It is not itself a medical assessment.
-            normalized = normalize_label(label)
-            normalized_no_tumor = {normalize_label(x) for x in NO_TUMOR_LABELS}
-            if normalized in normalized_no_tumor:
-                st.markdown('<div class="mascot">😊🧠</div>', unsafe_allow_html=True)
-                st.success(f"Model predicted class: {label}")
-            else:
-                st.markdown('<div class="mascot">🥺🧠</div>', unsafe_allow_html=True)
-                st.warning(f"Model predicted class: {label}")
+            # Friendly pink and warm-brown brain themes make the display easier to read.
+            # IMPORTANT: The colours/expressions are decorative only. The checkpoint
+            # does not establish whether output 0 or output 1 means tumor/no tumor.
+            is_pink_theme = predicted_index == 0
+            brain_emoji = "😊🧠" if is_pink_theme else "😟🧠"
+            theme_css = "pink" if is_pink_theme else "brown"
+            theme_title = "Happy-looking brain" if is_pink_theme else "Concerned-looking brain"
+            theme_message = (
+                "The model assigned the larger output score to this category. "
+                "The happy expression is a visual theme only, not confirmation that the MRI is normal."
+                if is_pink_theme
+                else
+                "The model assigned the larger output score to this category. "
+                "The concerned expression is a visual theme only, not confirmation of a tumor."
+            )
 
-            st.markdown(f"**Model score for the predicted class:** {confidence * 100:.2f}%")
-            st.progress(min(max(confidence, 0.0), 1.0))
+            st.markdown(
+                f'<div class="brain-mascot brain-{theme_css}">{brain_emoji}</div>',
+                unsafe_allow_html=True,
+            )
+            result_html = (
+                f'<div class="result-card result-card-{theme_css}">'
+                '<div class="result-kicker">MODEL&apos;S TOP MATCH</div>'
+                f'<div class="result-heading">{theme_title}</div>'
+                f'<div class="result-description">{theme_message}</div>'
+                '</div>'
+            )
+            st.markdown(result_html, unsafe_allow_html=True)
 
-            # Display each score when the model has multiple classes.
-            if len(CLASS_NAMES) > 2 or OUTPUT_MODE in ("two_class_logits", "two_class_probabilities"):
-                st.markdown("**Class scores**")
-                for class_name, score in zip(CLASS_NAMES, class_probabilities):
-                    st.write(f"{class_name}: {score * 100:.2f}%")
+            st.markdown("#### Visual comparison")
+            st.caption("The longer bar shows the larger relative score from the model. These values are not validated medical probabilities.")
 
-            st.caption(
-                "Model scores may be uncalibrated and can be wrong. This result cannot confirm "
-                "or rule out a tumor; seek interpretation by a qualified healthcare professional."
+            # Draw colour-coded comparison bars: pink for index 0, warm brown for index 1.
+            score_columns = st.columns(len(CLASS_NAMES))
+            for index, (class_name, score) in enumerate(zip(CLASS_NAMES, class_scores)):
+                with score_columns[index]:
+                    fill_css = "pink" if index == 0 else "brown"
+                    bar_width = int(round(min(max(float(score), 0.0), 1.0) * 100))
+                    bar_html = (
+                        f'<div class="score-label">{class_name}</div>'
+                        '<div class="score-track">'
+                        f'<div class="score-fill score-fill-{fill_css}" style="width:{bar_width}%"></div>'
+                        '</div>'
+                    )
+                    st.markdown(bar_html, unsafe_allow_html=True)
+                    if index == predicted_index:
+                        st.caption("Model's top match")
+                    else:
+                        st.caption("Other output class")
+
+            st.warning(
+                "Pink/happy and brown/concerned are visual themes only. The model file does not tell us "
+                "which output corresponds to tumor or no tumor, and the original training preprocessing "
+                "is not confirmed. Do not use this demonstration to make medical decisions."
             )
 
         except Exception as error:
